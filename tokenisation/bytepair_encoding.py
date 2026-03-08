@@ -1,29 +1,57 @@
 import tiktoken
+import torch
+from torch.utils.data import DataLoader, Dataset
 
 tokeniser = tiktoken.get_encoding("gpt2")
 
 
+class GPTDatasetV1(Dataset):
+    def __init__(self, text, tokeniser, max_len, stride):
+        self.input_ids = []
+        self.target_ids = []
+        token_ids = tokeniser.encode(text)
+
+        for i in range(0, len(token_ids) - max_len, stride):
+            input_chunk = token_ids[i : i + max_len]
+            target_chunk = token_ids[i + 1 : i + max_len + 1]
+
+            self.input_ids.append(torch.tensor(input_chunk))
+            self.target_ids.append(torch.tensor(target_chunk))
+
+    def __len__(self):
+        return len(self.input_ids)
+
+    def __getitem__(self, idx):
+        return self.input_ids[idx], self.target_ids[idx]
+
+
+def create_dataloader_V1(
+    text,
+    batch_size=4,
+    max_len=256,
+    stride=128,
+    shuffle=True,
+    drop_last=True,
+    num_workers=0,
+):
+    tokeniser = tiktoken.get_encoding("gpt2")
+    dataset = GPTDatasetV1(text, tokeniser, max_len, stride)
+    dataloader = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        drop_last=drop_last,
+        num_workers=0,
+    )
+    return dataloader
+
+
 with open("the-verdict.txt", "r", encoding="utf-8") as f:
     raw_text = f.read()
-enc_text = tokeniser.encode(raw_text)
-enc_sample = enc_text[50:]
+dataloader = create_dataloader_V1(
+    raw_text, batch_size=1, max_len=4, stride=1, shuffle=False
+)
+data_iter = iter(dataloader)
+first_batch = next(data_iter)
 
-context_size = 4
-x = enc_sample[:context_size]
-
-y = enc_sample[1 : context_size + 1]
-
-print(f"x: {x}")
-print(f"y:    {y}")
-
-
-for i in range(1, context_size + 1):
-    context = enc_sample[
-        :i
-    ]  # slicing from the start of the sample to the current index i not including i   exemple [0 , 1 , 2, 3 , 4] and i slice [:1] will give [0]  and slice [:2] will give [0, 1] and so on
-    desired = enc_sample[
-        i
-    ]  # will return the token at index i, which is the next token in the sequence that we want to predict based on the context
-    contextText = tokeniser.decode(context)
-    desiredText = tokeniser.decode([desired])
-    print(f" {contextText} ----->  {desiredText}")
+print(first_batch)
