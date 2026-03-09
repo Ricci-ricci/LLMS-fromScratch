@@ -21,4 +21,17 @@ W_value = torch.nn.Parameter(torch.rand(d_in, d_out), requires_grad=False)
 query_2 = x_2 @ W_query
 key_2 = inputs @ W_key
 value_2 = inputs @ W_value
-print(query_2)
+
+keys = inputs @ W_key
+values = inputs @ W_value
+
+keys_2 = keys[1]
+attn_score_22 = query_2.dot(keys_2)
+attn_scores_2 = query_2 @ keys.T
+
+d_k = keys.shape[-1]
+attn_weights_2 = torch.softmax(attn_scores_2 / d_k**0.5, dim=0)
+
+context_vec_2 = attn_weights_2 @ values
+print(context_vec_2)
+print(attn_weights_2)
