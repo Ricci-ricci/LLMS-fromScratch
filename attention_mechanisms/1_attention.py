@@ -15,7 +15,6 @@ query = inputs[1]  # journey(x^2)
 attn_scores_2 = torch.empty(inputs.shape[0])
 for i, x_i in enumerate(inputs):
     attn_scores_2[i] = torch.dot(x_i, query)
-print(attn_scores_2)
 attn_weights_2_tmp = attn_scores_2 / attn_scores_2.sum()
 
 
@@ -24,5 +23,22 @@ def softmax_naive(x):
 
 
 attn_weights_naive = softmax_naive(attn_scores_2)
-print("Attentions weights", attn_weights_naive)
-print("sum", attn_weights_naive.sum())
+
+
+context_vector_2 = torch.zeros(query.shape)
+for i, x_i in enumerate(inputs):
+    context_vector_2 += attn_weights_naive[i] * x_i
+print(context_vector_2)
+
+
+attn_scores = torch.empty(6, 6)
+for i, x_i in enumerate(inputs):
+    for j, x_j in enumerate(inputs):
+        attn_scores[i, j] = torch.dot(x_i, x_j)
+
+attn_weights = torch.softmax(attn_scores, dim=1)
+
+all_context_vecs = attn_weights @ inputs
+
+print(all_context_vecs)
+print(context_vector_2)
