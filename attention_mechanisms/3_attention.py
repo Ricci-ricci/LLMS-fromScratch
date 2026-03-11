@@ -209,7 +209,12 @@ attn_weights = torch.softmax(masked / keys.shape[-1] ** 0.5, dim=1)
 # etc.
 
 # ============================================================================
-# DROPOUT: Regularization technique (not implemented here, just a note)
+# DROPOUT: Regularization technique
 # ============================================================================
 # In practice, we also apply dropout to attention weights to prevent overfitting
 # Example: attn_weights = nn.Dropout(p=0.1)(attn_weights)
+torch.manual_seed(123)
+droupout = torch.nn.Dropout(0.5)
+example = torch.ones(6, 6)
+print(attn_weights)
+print(droupout(attn_weights))
