@@ -138,6 +138,30 @@ class TransformerBlock(nn.Module):
         return x
 
 
+class GPTModel(nn.Module):
+    def __init__(self, cfg):
+        super().__init__()
+        self.tok_emb = nn.Embedding(cfg["vocab_size"], cfg["emb_dim"])
+        self.pos_emb = nn.Embedding(cfg["context_length"], cfg["emb_dim"])
+        self.drop_emb = nn.Dropout(cfg["drop_rate"])
+        self.trf_blocks = nn.Sequential(
+            *[TransformerBlock(cfg) for _ in range(cfg["n_layers"])]
+        )
+        self.final_norm = LayerNorm(cfg["emb_dim"])
+        self.out_head = nn.Linear(cfg["emb_dim"], cfg["vocab_size"], bias=False)
+
+    def forward(self, in_idx):
+        batch_size, seq_len = in_idx.shape
+        tok_embeds = self.tok_emb(in_idx)
+        pos_embeds = self.pos_emb(torch.arange(seq_len, device=in_idx.device))
+        x = tok_embeds + pos_embeds
+        x = self.drop_emb(x)
+        x = self.trf_blocks(x)
+        x = self.final_norm(x)
+        logits = self.out_head(x)
+        return logits
+
+
 tokenizer = tiktoken.get_encoding("gpt2")
 batch = []
 txt1 = "Every effort moves you"
@@ -187,5 +211,44 @@ x = torch.rand(2, 4, 768)
 block = TransformerBlock(GPT_CONFIG_124M)
 output = block(x)
 
-print("Input shape", x.shape)
-print("Output shape", output.shape)
+
+# initialising using the gpt config
+
+
+torch.manual_seed(123)
+model = GPTModel(GPT_CONFIG_124M)
+out = model(batch)
+
+
+# generation of text
+def generate_text(model, idx, max_new_tokens, context_size):
+    for _ in range(max_new_tokens):
+        idx_cond = idx[:, -context_size:]
+        with torch.no_grad():
+            logits = model(idx_cond)
+
+        logits = logits[:, -1, :]
+        probas = torch.softmax(logits, dim=-1)
+        idx_next = torch.argmax(probas, dim=-1, keepdim=True)
+        idx = torch.cat((idx, idx_next), dim=1)
+        return idx
+
+
+start_context = "Hello, I am"
+encoded = tokenizer.encode(start_context)
+# print("encoded", encoded)
+encoded_tensor = torch.tensor(encoded).unsqueeze(0)
+# print("Encoded_Tensor shape", encoded_tensor.shape)
+
+model.eval()
+
+out = generate_text(
+    model=model,
+    idx=encoded_tensor,
+    max_new_tokens=6,
+    context_size=GPT_CONFIG_124M["context_length"],
+)
+print("Output indices:", out)
+print("Output shape:", len(out[0]))
+decoded_Text = tokenizer.decode(out.squeeze(0).tolist())
+print(decoded_Text)

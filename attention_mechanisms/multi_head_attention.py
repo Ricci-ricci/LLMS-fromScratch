@@ -105,7 +105,6 @@ context_len = batch.shape[1]
 
 ca = CausalAttention(d_in, d_out, context_len, 0.0)
 context_vecs = ca(batch)
-print("context Vector :", context_vecs.shape)
 
 
 torch.manual_seed(123)
@@ -113,6 +112,3 @@ context_len = batch.shape[1]
 d_in, d_out = 3, 2
 mha = MultiHeadAttentionWrapper(d_in, d_out, context_len, 0.0, num_heads=2)
 context_vector = mha(batch)
-
-print(context_vector)
-print("context_vector shape ", context_vector.shape)
