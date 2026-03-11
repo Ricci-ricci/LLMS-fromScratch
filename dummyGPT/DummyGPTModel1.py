@@ -1,6 +1,13 @@
+import sys
+from pathlib import Path
+
 import tiktoken
 import torch
 import torch.nn as nn
+
+# Add parent directory to path to access attention_mechanisms
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from attention_mechanisms.multi_head_attention import MultiHeadAttention
 
 GPT_CONFIG_124M = {
     "vocab_size": 50257,
@@ -55,6 +62,82 @@ class DummyLayerNorm(nn.Module):
         return x
 
 
+class LayerNorm(nn.Module):
+    def __init__(self, emb_dim):
+        super().__init__()
+        self.eps = 1e-5
+        self.scale = nn.Parameter(torch.ones(emb_dim))
+        self.shift = nn.Parameter(torch.zeros(emb_dim))
+
+    def forward(self, x):
+        mean = x.mean(dim=-1, keepdim=True)
+        var = x.var(dim=-1, keepdim=True, unbiased=False)
+        norm_x = (x - mean) / torch.sqrt(var + self.eps)
+        return self.scale * norm_x + self.shift
+
+
+class GELU(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
+        return (
+            0.5
+            * x
+            * (
+                1
+                + torch.tanh(
+                    torch.sqrt(torch.tensor(2.0 / torch.pi))
+                    * (x + 0.044715 * torch.pow(x, 3))
+                )
+            )
+        )
+
+
+class FeedForward(nn.Module):
+    def __init__(self, cfg):
+        super().__init__()
+        self.layers = nn.Sequential(
+            nn.Linear(cfg["emb_dim"], 4 * cfg["emb_dim"]),
+            GELU(),
+            nn.Linear(4 * cfg["emb_dim"], cfg["emb_dim"]),
+        )
+
+    def forward(self, x):
+        return self.layers(x)
+
+
+class TransformerBlock(nn.Module):
+    def __init__(self, cfg):
+        super().__init__()
+        self.att = MultiHeadAttention(
+            d_in=cfg["emb_dim"],
+            d_out=cfg["emb_dim"],
+            context_len=cfg["context_length"],
+            num_heads=cfg["n_heads"],
+            dropout=cfg["drop_rate"],
+            qkv_bias=cfg["qkv_bias"],
+        )
+        self.ff = FeedForward(cfg)
+        self.norm1 = LayerNorm(cfg["emb_dim"])
+        self.norm2 = LayerNorm(cfg["emb_dim"])
+        self.drop_shortcut = nn.Dropout(cfg["drop_rate"])
+
+    def forward(self, x):
+        shortcut = x
+        x = self.norm1(x)
+        x = self.att(x)
+        x = self.drop_shortcut(x)
+        x = x + shortcut
+
+        shortcut = x
+        x = self.norm2(x)
+        x = self.ff(x)
+        x = self.drop_shortcut(x)
+        x = x + shortcut
+        return x
+
+
 tokenizer = tiktoken.get_encoding("gpt2")
 batch = []
 txt1 = "Every effort moves you"
@@ -83,6 +166,26 @@ var = out.var(dim=-1, keepdim=True)
 out_norm = (out - mean) / torch.sqrt(var)
 mean = out_norm.mean(dim=-1, keepdim=True)
 var = out_norm.var(dim=-1, keepdim=True)
-print("Normalised Layer outputs ", out_norm)
-print(" mean ", mean)
-print("Variance", var)
+
+
+# trying the layernorm
+ln = LayerNorm(emb_dim=5)
+out_ln = ln(batch_example)
+mean = out_ln.mean(dim=-1, keepdim=True)
+var = out_ln.var(dim=-1, unbiased=False, keepdim=True)
+
+
+# feedforward example
+ffn = FeedForward(GPT_CONFIG_124M)
+x = torch.rand(2, 3, 768)
+out = ffn(x)
+
+
+# testing the transformer block
+torch.manual_seed(123)
+x = torch.rand(2, 4, 768)
+block = TransformerBlock(GPT_CONFIG_124M)
+output = block(x)
+
+print("Input shape", x.shape)
+print("Output shape", output.shape)
